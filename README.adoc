@@ -1,0 +1,3 @@
+= Playground for Arrow-Kt
+
+This is an experimental project for playing with functionality from the great https://arrow-kt.io[Arrow-Kt] Library.
