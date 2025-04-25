@@ -1,3 +1,5 @@
+package resilience
+
 import arrow.core.raise.Raise
 import arrow.core.raise.either
 import arrow.resilience.Schedule
@@ -9,9 +11,9 @@ import io.kotest.assertions.arrow.core.shouldBeRight
 import io.kotest.core.spec.style.DescribeSpec
 import kotlin.time.Duration.Companion.seconds
 
-class ResilienceTest : DescribeSpec({
-  describe("Resiliency test") {
-    val policy = Schedule
+class RetryTest : DescribeSpec({
+  describe("Retry") {
+    val policy = Schedule.Companion
       .forever<BaseError>()
       .log { error, attempts -> logger.warn { "$error on $attempts attempt" } }
 
@@ -39,7 +41,7 @@ class ResilienceTest : DescribeSpec({
 
     it("works mostly with max retries, jitter and backoff") {
       val realWorldPolicy =
-        (Schedule.recurs<BaseError>(5) and Schedule.exponential(1.seconds)).jittered()
+        (Schedule.Companion.recurs<BaseError>(5) and Schedule.Companion.exponential(1.seconds)).jittered()
           .log { error, output -> logger.warn { "$error with $output" } }
 
       val result = realWorldPolicy.retryRaise { mightFail() }
@@ -48,7 +50,7 @@ class ResilienceTest : DescribeSpec({
     }
 
     it("works for classical exceptions") {
-      val exceptionPolicy = Schedule.recurs<Throwable>(5)
+      val exceptionPolicy = Schedule.Companion.recurs<Throwable>(5)
         .log { error, attempts -> logger.warn { "$error, attempt $attempts" } }
 
       val result = exceptionPolicy
@@ -79,4 +81,4 @@ sealed class BaseError(val message: String)
 data object WtfError : BaseError("WTF???")
 data object ThisIsFineError : BaseError("This is a Fine")
 
-val logger = KotlinLogging.logger {}
+private val logger = KotlinLogging.logger {}
