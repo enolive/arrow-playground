@@ -1,62 +1,94 @@
 package resilience
 
-import arrow.core.raise.Raise
 import arrow.core.raise.either
 import arrow.resilience.Schedule
+import arrow.resilience.retry
 import arrow.resilience.retryOrElseEither
 import arrow.resilience.retryRaise
 import io.github.oshai.kotlinlogging.KotlinLogging
 import io.kotest.assertions.arrow.core.shouldBeLeft
 import io.kotest.assertions.arrow.core.shouldBeRight
 import io.kotest.core.spec.style.DescribeSpec
+import io.kotest.matchers.shouldBe
 import kotlin.time.Duration.Companion.seconds
 
 class RetryTest : DescribeSpec({
   describe("Retry") {
-    val policy = Schedule.Companion
+    val policy = Schedule
       .forever<BaseError>()
-      .log { error, attempts -> logger.warn { "$error on $attempts attempt" } }
+      .log { error, attempts -> log.warn { "$error on $attempts attempt" } }
 
-    it("works sometimes :-p") {
+    it("works never") {
       val result = either {
-        mightFail()
+        raise(WtfError)
       }
 
-      result shouldBeRight 42
+      result shouldBeLeft WtfError
     }
 
     it("works always") {
-      val result = policy.retryRaise { mightFail() }
+      var count = 0
+      val result = policy.retryRaise {
+        if (count++ < 10) raise(WtfError)
+        42
+      }
 
       result shouldBeRight 42
     }
 
     it("works only on specific errors") {
       val conditionalPolicy = policy.doWhile { error, _ -> error is WtfError }
+      var count = 0
 
-      val result = conditionalPolicy.retryRaise { mightFail() }
+      val result = conditionalPolicy.retryRaise {
+        if (count++ < 5) raise(WtfError)
+        if (count++ < 10) raise(ThisIsFineError)
+        42
+      }
 
-      result shouldBeRight 42
+      result shouldBeLeft ThisIsFineError
     }
 
-    it("works mostly with max retries, jitter and backoff") {
+    it("works with real world retry logic") {
       val realWorldPolicy =
-        (Schedule.Companion.recurs<BaseError>(5) and Schedule.Companion.exponential(1.seconds)).jittered()
-          .log { error, output -> logger.warn { "$error with $output" } }
+        (Schedule.recurs<BaseError>(5) and Schedule.exponential(1.seconds)).jittered()
+          .log { error, output -> log.warn { "$error with $output" } }
+      var count = 0
 
-      val result = realWorldPolicy.retryRaise { mightFail() }
+      val result = realWorldPolicy.retryRaise {
+        count++
+        if (count > 3) {
+          return@retryRaise 42
+        }
+        if (count % 2 == 0) raise(ThisIsFineError) else raise(WtfError)
+      }
 
       result shouldBeRight 42
     }
 
     it("works for classical exceptions") {
-      val exceptionPolicy = Schedule.Companion.recurs<Throwable>(5)
-        .log { error, attempts -> logger.warn { "$error, attempt $attempts" } }
+      val exceptionPolicy = Schedule.recurs<Throwable>(5)
+        .log { error, attempts -> log.warn { "$error, attempt $attempts" } }
+      var count = 0
+
+      val result = exceptionPolicy.retry {
+        if (count++ < 5) error("BAM!")
+        42
+      }
+
+      result shouldBe 42
+    }
+
+    it("works for classical exceptions turned into either") {
+      val exceptionPolicy = Schedule.recurs<Throwable>(5)
+        .log { error, attempts -> log.warn { "$error, attempt $attempts" } }
+      var count = 0
 
       val result = exceptionPolicy
         .retryOrElseEither(
           {
-            throw RuntimeException("BAM!")
+            if (count++ < 10) error("BAM!")
+            42
           },
           { err, output -> WtfError }
         )
@@ -66,19 +98,8 @@ class RetryTest : DescribeSpec({
   }
 })
 
-private fun Raise<BaseError>.mightFail(): Int {
-  val random = (1..3).random()
-  if (random == 1) {
-    raise(WtfError)
-  }
-  if (random == 2) {
-    raise(ThisIsFineError)
-  }
-  return 42
-}
-
 sealed class BaseError(val message: String)
 data object WtfError : BaseError("WTF???")
 data object ThisIsFineError : BaseError("This is a Fine")
 
-private val logger = KotlinLogging.logger {}
+private val log = KotlinLogging.logger {}

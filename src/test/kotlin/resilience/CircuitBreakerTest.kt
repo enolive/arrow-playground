@@ -49,7 +49,7 @@ class CircuitBreakerTest : DescribeSpec({
     }
 
     it("can be combined with a schedule") {
-      val schedule = (Schedule.Companion.recurs<Throwable>(maxFailures.toLong()) zipLeft Schedule.Companion.exponential(base = 1.seconds))
+      val schedule = (Schedule.recurs<Throwable>(maxFailures.toLong()) zipLeft Schedule.exponential(base = 1.seconds))
         .jittered()
         .log { error, attempts -> logger.warn(error) { "failed at $attempts attempt" } }
 
@@ -58,7 +58,7 @@ class CircuitBreakerTest : DescribeSpec({
         { error, attempts -> RetriesExhaustedError(attempts) }
       )
 
-      failure shouldBeLeft RetriesExhaustedError(5)
+      failure shouldBeLeft RetriesExhaustedError(maxFailures.toLong())
 
       val success = schedule.retryOrElseEither(
         { circuitBreaker.protectOrThrow { 42 } },
