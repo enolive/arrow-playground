@@ -16,6 +16,7 @@ dependencies {
   implementation("io.arrow-kt:arrow-core:$arrowVersion")
   implementation("io.arrow-kt:arrow-resilience:$arrowVersion")
   implementation("io.arrow-kt:arrow-atomic:$arrowVersion")
+  implementation("io.arrow-kt:arrow-fx-coroutines:$arrowVersion")
   implementation("io.github.oshai:kotlin-logging:7.0.7")
   implementation("ch.qos.logback:logback-classic:1.5.18")
 
